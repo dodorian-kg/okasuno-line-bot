@@ -10,10 +10,18 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+ADMIN_LINE_TARGET_ID = os.getenv("ADMIN_LINE_TARGET_ID")
+
+HANDOFF_PHRASE = "スタッフにお繋ぎしましょうか？"
+
 SYSTEM_PROMPT = (
     "あなたはスノーボードグッズレンタルショップ「おかスノ」のカスタマーサポートBotです。"
     "お客様のレンタル料金・予約・営業時間などの問い合わせに、丁寧かつ簡潔に日本語で答えてください。"
-    "分からないことは「スタッフにお繋ぎします」と伝えてください。"
+    "回答は必ず下記「店舗情報(最新)」に含まれる事実のみを根拠としてください。"
+    "そこに書かれていない内容は推測せず、その場合は最後に必ず"
+    f"「{HANDOFF_PHRASE}」"
+    "と問いかけてください（この定型文は FAQ の本文には書かないでください。"
+    "ユーザーが「はい」「お願いします」等で承認した場合にスタッフへの通知がトリガーされます）。"
 )
 
 for _name, _val in [

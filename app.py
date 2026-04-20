@@ -10,9 +10,10 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
-from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN
+from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, HANDOFF_PHRASE
 from gemini_client import get_gemini_response
-from gemini_client import get_gemini_response
+from notifier import notify_staff
+from supabase_client import set_pending_handoff, pop_pending_handoff
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -20,6 +21,30 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+
+AFFIRMATIVE_TOKENS = ("yes", "y", "はい", "お願い", "おねがい", "ok", "了解", "うん", "繋い", "つない")
+NEGATIVE_TOKENS = ("no", "n", "いいえ", "結構", "大丈夫", "やめ", "キャンセル")
+
+
+def _is_affirmative(text: str) -> bool:
+    t = text.strip().lower()
+    return any(tok in t for tok in AFFIRMATIVE_TOKENS)
+
+
+def _is_negative(text: str) -> bool:
+    t = text.strip().lower()
+    return any(tok in t for tok in NEGATIVE_TOKENS)
+
+
+def _reply(event, text: str) -> None:
+    with ApiClient(configuration) as api_client:
+        MessagingApi(api_client).reply_message(
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=text)],
+            )
+        )
+    logger.info(f"返信: {text}")
 
 
 @app.route("/health")
@@ -42,7 +67,18 @@ def callback():
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     user_text = event.message.text
-    logger.info(f"受信: {user_text}")
+    user_id = getattr(event.source, "user_id", None)
+    logger.info(f"受信: {user_text} source={event.source}")
+
+    pending = pop_pending_handoff(user_id) if user_id else None
+    if pending:
+        if _is_affirmative(user_text):
+            notify_staff(pending["original_question"], pending["bot_reply"])
+            _reply(event, "スタッフに連絡しました。しばらくお待ちください。")
+            return
+        if _is_negative(user_text):
+            _reply(event, "承知しました。ほかにご質問があればどうぞ。")
+            return
 
     try:
         reply_text = get_gemini_response(user_text)
@@ -50,15 +86,14 @@ def handle_message(event):
         logger.error(f"Gemini APIエラー: {e}")
         reply_text = "申し訳ありません、現在応答できません。しばらくお待ちください。"
 
-    with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=reply_text)],
-            )
-        )
-    logger.info(f"返信: {reply_text}")
+    _reply(event, reply_text)
+
+    if HANDOFF_PHRASE in reply_text and user_id:
+        try:
+            set_pending_handoff(user_id, user_text, reply_text)
+            logger.info(f"pending_handoff set for {user_id}")
+        except Exception as e:
+            logger.error(f"pending_handoff保存失敗: {e}")
 
 
 if __name__ == "__main__":
