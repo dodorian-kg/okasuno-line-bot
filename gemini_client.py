@@ -20,7 +20,7 @@ def _build_system_instruction() -> str:
 
 def get_gemini_response(user_message: str) -> str:
     response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         contents=user_message,
         config=types.GenerateContentConfig(
             system_instruction=_build_system_instruction(),
