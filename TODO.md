@@ -50,48 +50,90 @@
 
 ## Phase 5: Git / GitHub 導入
 
-- [ ] `git init` でローカルリポジトリを初期化する
+- [x] `git init` でローカルリポジトリを初期化する
   > ゴール: `git status` でワーキングツリーが表示される
-- [ ] `.gitignore` が `venv/`・`.env`・`__pycache__/` を除外しているか確認・追記する
+- [x] `.gitignore` が `venv/`・`.env`・`__pycache__/` を除外しているか確認・追記する
   > ゴール: `git status` に `.env` と `venv/` が表示されない
-- [ ] 初回コミット（Phase 1〜4 の成果を一括コミット）を行う
+- [x] 初回コミット（Phase 1〜4 の成果を一括コミット）を行う
   > ゴール: `git log` に初回コミットが記録される
 - [ ] GitHub で Private リポジトリを作成する（例: `okasuno-line-bot`）
   > ゴール: GitHub Web 上で空のリポジトリが存在する
 - [ ] リモート登録と初回 push（`git remote add origin ...` → `git push -u origin main`）を行う
   > ゴール: GitHub Web 上に全ファイル（`.env` 以外）が表示される
-- [ ] `README.md` を作成する（Bot の概要・セットアップ手順・環境変数一覧）
+- [x] `README.md` を作成する（Bot の概要・セットアップ手順・環境変数一覧）
   > ゴール: リポジトリトップで概要が読める
 
 ## Phase 6: エラーハンドリングとコードの整理
 
-- [ ] Gemini APIのエラー（接続エラー、レート制限、その他例外）にフォールバックメッセージを返す処理を追加する
+- [x] Gemini APIのエラー（接続エラー、レート制限、その他例外）にフォールバックメッセージを返す処理を追加する
   > ゴール: APIエラー時にユーザーへ「しばらくお待ちください」等のメッセージが返り、サーバーがクラッシュしない
-- [ ] `app.py` にロギング（`logging`モジュール）を導入する
+- [x] `app.py` にロギング（`logging`モジュール）を導入する
   > ゴール: メッセージの受信・返信・エラーがタイムスタンプ付きでコンソールに出力される
-- [ ] Webhook署名検証失敗時のログとエラーレスポンスを確認する
+- [x] Webhook署名検証失敗時のログとエラーレスポンスを確認する
   > ゴール: 不正リクエスト受信時に警告ログが出力され、400が返ることをテストで確認する
 - [ ] コード全体を見直し、不要なコメント・未使用importがないことを確認する
   > ゴール: 各ファイルが整理され、`python app.py` で警告なく起動する
 
 ## Phase 7: Supabase 連携（FAQ・商品マスタ＋予約データ）
 
-- [ ] Supabase プロジェクトを作成し、URL と anon key を控える
+> 2026-04-20 方針決定: 店舗情報 (料金・営業時間など) は Supabase `faqs` に保存。デプロイ後は Supabase ダッシュボードから編集すれば再デプロイ不要で即反映される運用にする。
+
+- [x] Supabase プロジェクトを作成し、URL と anon key を控える
   > ゴール: Supabase ダッシュボードでプロジェクトが開ける
-- [ ] `supabase` Python クライアントを `requirements.txt` に追加する
+- [x] `supabase` Python クライアントを `requirements.txt` に追加する
   > ゴール: `pip install -r requirements.txt` で `supabase-py` が入る
-- [ ] `.env` に `SUPABASE_URL` / `SUPABASE_KEY` を追加し、`config.py` で読み込む
+- [x] `.env` に `SUPABASE_URL` / `SUPABASE_KEY` を追加し、`config.py` で読み込む
   > ゴール: `python -c "from config import SUPABASE_URL; print('OK')"` がエラーなく動く
-- [ ] Supabase SQL Editor で `faqs` テーブルを作成する（`id`, `question`, `answer`, `category`, `updated_at`）
+- [x] Supabase SQL Editor で `faqs` テーブルを作成する（`id`, `question`, `answer`, `category`, `updated_at`）
   > ゴール: Table Editor に `faqs` が存在し、サンプルFAQを挿入できる
+  > スキーマ: `id bigint generated always as identity pk, question text not null, answer text not null, category text not null, updated_at timestamptz default now()`
+  > RLS: anon に SELECT のみ許可（書き込みは拒否）
+  > シード category 案: 料金 / 営業時間 / 予約方法 / キャンセルポリシー / アクセス / 持ち物 / サイズ展開 / 支払い / その他
 - [ ] Supabase SQL Editor で `reservations` テーブルを作成する（`id`, `line_user_id`, `plan`, `reserved_at`, `party_size`, `status`, `created_at`）
   > ゴール: Table Editor に `reservations` が存在する
-- [ ] `supabase_client.py` を作成し、FAQ 取得と予約 INSERT の関数を実装する
+- [x] `supabase_client.py` を作成し、FAQ 取得関数を実装する
   > ゴール: `python -c "from supabase_client import get_all_faqs; print(get_all_faqs())"` でサンプルFAQが返る
-- [ ] `gemini_client.py` を改修し、回答前に FAQ を取得して Gemini のプロンプトに組み込む
+  > 実装済: `get_all_faqs()` / `format_faqs_for_prompt()` / `set_pending_handoff()` / `pop_pending_handoff()`
+- [x] `gemini_client.py` を改修し、回答前に FAQ を取得して Gemini のプロンプトに組み込む
   > ゴール: 「レンタル料金は？」と送ると Supabase 上の FAQ に基づいた回答が返る
+  > 毎リクエストで FAQ を取得 → `## 店舗情報(最新)` として system_instruction に注入
 - [ ] 予約キーワード検知時、対話フローで日時・プラン・人数を聞き取り `reservations` に INSERT する
   > ゴール: LINE から予約を実行すると Supabase にレコードが追加され、確認メッセージが返る
+
+## Phase 7.5: スタッフエスカレーション通知（2 段階承認）
+
+> FAQ に無い質問が来たとき、Bot が「スタッフにお繋ぎしましょうか？」と尋ね、ユーザーが肯定したら管理者 LINE に通知する 2 段階フロー。状態は Supabase に保持し、Vercel サーバーレスでも成立するようにする。
+
+- [x] `config.py` で `HANDOFF_PHRASE = "スタッフにお繋ぎしましょうか？"` を定数化し、SYSTEM_PROMPT をペルソナ + 注入ルール + 定型質問文に再構成
+  > ゴール: FAQ に無い内容への回答末尾に必ず HANDOFF_PHRASE が付く
+- [x] `notifier.py` を作成し `notify_staff(user_text, bot_text)` で LINE `push_message` を送るラッパを実装
+  > ゴール: ADMIN_LINE_TARGET_ID 未設定時は警告ログで no-op、送信失敗も握り潰してログのみ
+- [x] Supabase SQL Editor で `pending_handoffs` テーブルを作成する
+  > ```sql
+  > create table pending_handoffs (
+  >   user_id text primary key,
+  >   original_question text not null,
+  >   bot_reply text not null,
+  >   created_at timestamptz default now()
+  > );
+  > alter table pending_handoffs enable row level security;
+  > ```
+  > RLS: SUPABASE_KEY に service_role を使うか、このテーブルは anon に INSERT/SELECT/DELETE を許可する専用ポリシーを設定
+- [x] `app.py` で 2 段階承認フローを実装
+  > ゴール:
+  > 1. 毎受信で `pop_pending_handoff(user_id)` を実行
+  > 2. 保留中 + 肯定語 (yes/はい/お願い/ok/了解 等) → `notify_staff` + 「スタッフに連絡しました」
+  > 3. 保留中 + 否定語 (no/いいえ/結構/大丈夫 等) → 「承知しました」で終了
+  > 4. 保留なし → Gemini 応答 → 返答に HANDOFF_PHRASE が含まれれば `set_pending_handoff` で保留登録
+  > 5. 保留は 10 分で失効
+- [ ] `ADMIN_LINE_TARGET_ID` を `.env` に設定する
+  > 取得手順: 管理者 LINE で Bot に一度メッセージ送信 → `app.py` のログ `source=...` から `user_id` をコピー → `.env` に貼り付け → 再起動
+  > グループ通知にしたい場合は Bot をグループに招待 → グループで発言 → `group_id` を取得して貼り付け
+- [ ] エンドツーエンド検証
+  > 1. FAQ に無い質問を送る → Bot が `スタッフにお繋ぎしましょうか？` と返す
+  > 2. 続けて「はい」と送る → 管理者 LINE に「🔔 スタッフ対応依頼」通知が届く
+  > 3. 再度 FAQ に無い質問 → 「いいえ」で返す → 通知が飛ばないこと
+  > 4. FAQ にヒットする質問 (例: 営業時間) では通知が発生しないこと
 
 ## Phase 8: Vercel デプロイ
 
