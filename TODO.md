@@ -56,9 +56,9 @@
   > ゴール: `git status` に `.env` と `venv/` が表示されない
 - [x] 初回コミット（Phase 1〜4 の成果を一括コミット）を行う
   > ゴール: `git log` に初回コミットが記録される
-- [ ] GitHub で Private リポジトリを作成する（例: `okasuno-line-bot`）
+- [x] GitHub で Private リポジトリを作成する（例: `okasuno-line-bot`）
   > ゴール: GitHub Web 上で空のリポジトリが存在する
-- [ ] リモート登録と初回 push（`git remote add origin ...` → `git push -u origin main`）を行う
+- [x] リモート登録と初回 push（`git remote add origin ...` → `git push -u origin main`）を行う
   > ゴール: GitHub Web 上に全ファイル（`.env` 以外）が表示される
 - [x] `README.md` を作成する（Bot の概要・セットアップ手順・環境変数一覧）
   > ゴール: リポジトリトップで概要が読める
