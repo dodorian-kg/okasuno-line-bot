@@ -139,3 +139,7 @@
   - peek: 読み出しのみ (TTL 切れ行は掃除)
   - delete: app.py で yes/no 合致 & pending 発見時に明示的に呼ぶ
   - app.py の import とハンドラ内呼び出しも差替え (set_pending_handoff は既に _reply 前配置)
+- 追加修正: set_pending_handoff の upsert payload に `created_at=now()` を明示追加
+  - 背景: `created_at` カラムの `DEFAULT now()` は INSERT 時のみ発火し、UPDATE (upsert の UPDATE パス) では更新されないため、同一 user_id で 2 回目以降の質問でも初回の `created_at` が残り、TTL(10 分) が誤って早期に切れる
+  - 症状: 21:37 の「いいえ」送信で peek が `expired` 判定 → 行削除 + None 返却 → Gemini 経路にフォールスルー → 固定文言ではなく Gemini 生成文が返る
+  - 修正: `datetime.now(timezone.utc).isoformat()` を upsert に同梱し、質問のたびに TTL をリセット

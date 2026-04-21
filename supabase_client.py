@@ -41,6 +41,7 @@ def set_pending_handoff(user_id: str, original_question: str, bot_reply: str) ->
             "user_id": user_id,
             "original_question": original_question,
             "bot_reply": bot_reply,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
     ).execute()
     logger.info(f"pending_handoff upsert response: data={res.data}")
