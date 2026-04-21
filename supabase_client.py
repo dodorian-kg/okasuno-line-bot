@@ -46,7 +46,7 @@ def set_pending_handoff(user_id: str, original_question: str, bot_reply: str) ->
     logger.info(f"pending_handoff upsert response: data={res.data}")
 
 
-def pop_pending_handoff(user_id: str) -> dict | None:
+def peek_pending_handoff(user_id: str) -> dict | None:
     res = (
         _client.table("pending_handoffs")
         .select("user_id, original_question, bot_reply, created_at")
@@ -57,11 +57,15 @@ def pop_pending_handoff(user_id: str) -> dict | None:
     if not rows:
         return None
 
-    _client.table("pending_handoffs").delete().eq("user_id", user_id).execute()
-
     row = rows[0]
     created = datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
     if datetime.now(timezone.utc) - created > timedelta(minutes=PENDING_HANDOFF_TTL_MINUTES):
         logger.info(f"pending_handoff expired for {user_id}")
+        _client.table("pending_handoffs").delete().eq("user_id", user_id).execute()
         return None
     return row
+
+
+def delete_pending_handoff(user_id: str) -> None:
+    _client.table("pending_handoffs").delete().eq("user_id", user_id).execute()
+    logger.info(f"pending_handoff deleted for {user_id}")

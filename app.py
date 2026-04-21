@@ -13,7 +13,7 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from config import LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, HANDOFF_PHRASE
 from gemini_client import get_gemini_response
 from notifier import notify_staff
-from supabase_client import set_pending_handoff, pop_pending_handoff
+from supabase_client import set_pending_handoff, peek_pending_handoff, delete_pending_handoff
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -71,13 +71,15 @@ def handle_message(event):
     logger.info(f"受信: {user_text} source={event.source}")
 
     if user_id and (_is_affirmative(user_text) or _is_negative(user_text)):
-        pending = pop_pending_handoff(user_id)
+        pending = peek_pending_handoff(user_id)
         if pending:
             if _is_affirmative(user_text):
                 notify_staff(pending["original_question"], pending["bot_reply"])
+                delete_pending_handoff(user_id)
                 _reply(event, "スタッフに連絡しました。しばらくお待ちください。")
                 return
             if _is_negative(user_text):
+                delete_pending_handoff(user_id)
                 _reply(event, "承知しました。ほかにご質問があればどうぞ。")
                 return
 

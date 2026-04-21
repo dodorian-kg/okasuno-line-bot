@@ -15,7 +15,7 @@
 - [ ] Phase 7.6: `pending_handoffs` が本番で保存されないバグの調査・修正
   > 2026-04-21 の E2E 検証で判明: Vercel Serverless + LINE Webhook リトライ環境下で、`set_pending_handoff` への到達前に lambda が kill されている可能性が高い
   > 仮説: (a) LINE 切断による Vercel request cancellation で lambda 終了 / (b) 先着 lambda の set 直後に後続 lambda の pop による無条件削除
-  > 小修正案 (本日着手予定): app.py で set_pending_handoff を _reply の前に移動 + pop_pending_handoff を AFFIRMATIVE/NEGATIVE 合致時のみ delete に条件化
+  > 小修正: pop_pending_handoff を peek_pending_handoff + delete_pending_handoff に 2 フェーズ化し、yes/no 合致時のみ delete に条件化 (set_pending_handoff を _reply 前に移動する修正は既に適用済)
   > 本格対応案 (後日): /callback 即時 ACK + push_message 非同期化 + event_id による冪等性担保
 - [ ] Vercel トライアル期限 (2026-05-04 頃) 前に Hobby プラン (無料) へダウングレードするか有料継続するか判断
 - [ ] Phase 7 の `reservations` テーブル / 予約フローの実装 (スコープが固まったら)
@@ -135,3 +135,7 @@
     - `pending_handoff set for` / `pending_handoff保存失敗` のログが**一切出ていない**点から、`set_pending_handoff` 呼び出しに到達する前に lambda が終了している疑い
     - 仮説: Gemini の応答遅延 → LINE Webhook 1 秒タイムアウト → 同一イベント再送 → Vercel で複数 lambda 並行 → 先着 lambda が reply 後 `set_pending_handoff` 到達前に request cancellation で kill / 後続 lambda は reply_token 再利用で 500
     - 対応: Phase 7.6 として新設し、まず小修正 (set_pending_handoff を _reply 前へ、pop_pending_handoff を yes/no 合致時のみ) を試行する方針
+- Phase 7.6 小修正を実装: supabase_client.py の pop_pending_handoff を peek_pending_handoff + delete_pending_handoff に 2 フェーズ化
+  - peek: 読み出しのみ (TTL 切れ行は掃除)
+  - delete: app.py で yes/no 合致 & pending 発見時に明示的に呼ぶ
+  - app.py の import とハンドラ内呼び出しも差替え (set_pending_handoff は既に _reply 前配置)
