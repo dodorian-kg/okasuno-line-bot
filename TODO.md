@@ -16,7 +16,10 @@
   > 2026-04-21 解決: 原因は (1) pop の無条件削除 (仮説 b) + (2) `set_pending_handoff` の upsert で `created_at` が更新されず TTL が早期に切れる問題 の 2 つ
   > 対応: pop を peek + delete に 2 フェーズ化 + upsert payload に `created_at=now()` を明示追加
   > 本格対応案 (後日、race condition が再度問題化したら): /callback 即時 ACK + push_message 非同期化 + event_id による冪等性担保
-- [ ] Vercel トライアル期限 (2026-05-04 頃) 前に Hobby プラン (無料) へダウングレードするか有料継続するか判断
+- [x] Vercel トライアル期限 (2026-05-04 頃) 前に Hobby プラン (無料) へダウングレードするか有料継続するか判断
+  > 2026-04-21 Hobby へダウングレード完了。使用量 (過去30日) は Function Invocations 350 / Fast Data Transfer 655kB / Build 6分 と Hobby 無料枠の 0.1% 以下で余裕
+  > 留意点: Hobby の Function Timeout は 10秒 (Pro 300秒から短縮) — 現状 Gemini 応答 3〜5秒で問題ないが応答遅延時は監視
+  > ToS 上「非商用のみ」だが学習プロジェクトとして運用、規模拡大時は Pro 復帰 or 他 Serverless 移行を再検討
 - [ ] Phase 7 の `reservations` テーブル / 予約フローの実装 (スコープが固まったら)
 - [x] README.md の本番状態への追従更新 (cloudflared は開発用途のみ、Vercel を本番デプロイ手順として追記)
   > 2026-04-21 実施: アーキテクチャに Vercel を追加 + 「本番デプロイ (Vercel)」節を新設 + ファイル構成に `api/index.py` / `vercel.json` を追記 + cloudflared 節を「ローカル手動検証時のみ」に降格
