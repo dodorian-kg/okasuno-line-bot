@@ -18,6 +18,7 @@
   > 本格対応案 (後日、race condition が再度問題化したら): /callback 即時 ACK + push_message 非同期化 + event_id による冪等性担保
 - [ ] Vercel トライアル期限 (2026-05-04 頃) 前に Hobby プラン (無料) へダウングレードするか有料継続するか判断
 - [ ] Phase 7 の `reservations` テーブル / 予約フローの実装 (スコープが固まったら)
+- [ ] README.md の本番状態への追従更新 (cloudflared は開発用途のみ、Vercel を本番デプロイ手順として追記)
 
 ---
 
@@ -64,8 +65,9 @@
 - [x] Gemini API エラー時のフォールバックメッセージを実装 (`app.py` の try/except)
 - [x] `logging` モジュールでログ出力
 - [x] Webhook 署名検証失敗時のログ・400 レスポンス確認
-- [ ] コード全体を見直し、不要なコメント・未使用 import を確認
-  > Phase 8 完了後、落ち着いたタイミングで実施
+- [x] コード全体を見直し、不要なコメント・未使用 import を確認
+  > 2026-04-21 実施: app.py / config.py / gemini_client.py / supabase_client.py / notifier.py / api/index.py の 6 ファイルを精査、未使用 import・不要コメントなし
+  > 別件で README.md が本番状態と乖離 (cloudflared 中心記述・Vercel を「将来移行予定」と記載) を確認 → 別タスク扱い
 
 ## Phase 7: Supabase 連携（FAQ・商品マスタ＋予約データ）
 
