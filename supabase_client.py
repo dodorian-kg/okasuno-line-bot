@@ -36,13 +36,14 @@ PENDING_HANDOFF_TTL_MINUTES = 10
 
 
 def set_pending_handoff(user_id: str, original_question: str, bot_reply: str) -> None:
-    _client.table("pending_handoffs").upsert(
+    res = _client.table("pending_handoffs").upsert(
         {
             "user_id": user_id,
             "original_question": original_question,
             "bot_reply": bot_reply,
         }
     ).execute()
+    logger.info(f"pending_handoff upsert response: data={res.data}")
 
 
 def pop_pending_handoff(user_id: str) -> dict | None:
