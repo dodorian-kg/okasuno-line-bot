@@ -18,7 +18,8 @@
   > 本格対応案 (後日、race condition が再度問題化したら): /callback 即時 ACK + push_message 非同期化 + event_id による冪等性担保
 - [ ] Vercel トライアル期限 (2026-05-04 頃) 前に Hobby プラン (無料) へダウングレードするか有料継続するか判断
 - [ ] Phase 7 の `reservations` テーブル / 予約フローの実装 (スコープが固まったら)
-- [ ] README.md の本番状態への追従更新 (cloudflared は開発用途のみ、Vercel を本番デプロイ手順として追記)
+- [x] README.md の本番状態への追従更新 (cloudflared は開発用途のみ、Vercel を本番デプロイ手順として追記)
+  > 2026-04-21 実施: アーキテクチャに Vercel を追加 + 「本番デプロイ (Vercel)」節を新設 + ファイル構成に `api/index.py` / `vercel.json` を追記 + cloudflared 節を「ローカル手動検証時のみ」に降格
 
 ---
 

@@ -9,9 +9,10 @@
 - **Gemini 2.5 Flash Lite** — 回答生成（Supabase から取得した FAQ を system_instruction に注入）
 - **Supabase** — FAQ マスタ (`faqs`) と エスカレーション保留ステート (`pending_handoffs`) の永続化
 - **スタッフエスカレーション通知** — FAQ に無い質問にはユーザー承認後に管理者 LINE へ push 通知
-- **cloudflared** — ローカル開発時に外部公開（将来は Vercel へ移行予定）
+- **Vercel (Serverless Python)** — 本番稼働インフラ (`api/index.py` を entry に Flask app をラップ)
+- **cloudflared** — ローカル開発時のみ、手元 Flask を外部公開するためのトンネル
 
-## セットアップ
+## ローカル開発セットアップ
 
 ### 1. 仮想環境の作成と有効化
 
@@ -55,13 +56,25 @@ python app.py
 
 `http://localhost:5000/health` にアクセスして `{"status": "ok"}` が返れば OK。
 
-### 6. cloudflared で外部公開 & LINE Webhook 設定
+### 6. cloudflared で外部公開 (ローカル手動検証時のみ)
+
+本番は Vercel で常時稼働しているため、ローカルで LINE からの Webhook を受けたい時だけ cloudflared を起動します（Webhook URL の切替を伴うため、通常は Vercel 側で十分）。
 
 ```bash
 cloudflared tunnel --url http://localhost:5000
 ```
 
-発行された `https://xxxx.trycloudflare.com` を LINE Developers Console の Webhook URL に `/callback` を付けて登録します（例: `https://xxxx.trycloudflare.com/callback`）。
+発行された `https://xxxx.trycloudflare.com` を LINE Developers Console の Webhook URL に `/callback` を付けて一時的に登録します。
+
+## 本番デプロイ (Vercel)
+
+GitHub への push で Vercel が自動デプロイします。
+
+- Entry: `api/index.py` が `app.py` の Flask app を import し、`@vercel/python` で serverless 関数化 (`vercel.json` 参照)
+- 本番 URL: `https://okasuno-line-bot.vercel.app`
+- Webhook URL: `https://okasuno-line-bot.vercel.app/callback` を LINE Developers Console に登録
+- ヘルスチェック: `https://okasuno-line-bot.vercel.app/health` が `{"status": "ok"}` を返せば OK
+- 環境変数 6 件 (下表「環境変数」参照) は Vercel プロジェクト設定に同名で登録する
 
 ## 環境変数
 
@@ -83,6 +96,8 @@ cloudflared tunnel --url http://localhost:5000
 | `gemini_client.py` | Gemini API クライアント (FAQ 注入) |
 | `supabase_client.py` | Supabase クライアント (FAQ 取得、pending_handoffs 操作) |
 | `notifier.py` | 管理者 LINE への push 通知ラッパ |
+| `api/index.py` | Vercel serverless entry (Flask app の re-export) |
+| `vercel.json` | Vercel ビルド設定 (`@vercel/python`) |
 | `requirements.txt` | Python 依存ライブラリ |
 | `TODO.md` | 開発ロードマップ |
 | `Instruction.md` | 構築手順書 |
