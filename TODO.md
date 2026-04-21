@@ -12,11 +12,10 @@
 
 ## 翌日以降に必要なタスク
 
-- [ ] Phase 7.6: `pending_handoffs` が本番で保存されないバグの調査・修正
-  > 2026-04-21 の E2E 検証で判明: Vercel Serverless + LINE Webhook リトライ環境下で、`set_pending_handoff` への到達前に lambda が kill されている可能性が高い
-  > 仮説: (a) LINE 切断による Vercel request cancellation で lambda 終了 / (b) 先着 lambda の set 直後に後続 lambda の pop による無条件削除
-  > 小修正: pop_pending_handoff を peek_pending_handoff + delete_pending_handoff に 2 フェーズ化し、yes/no 合致時のみ delete に条件化 (set_pending_handoff を _reply 前に移動する修正は既に適用済)
-  > 本格対応案 (後日): /callback 即時 ACK + push_message 非同期化 + event_id による冪等性担保
+- [x] Phase 7.6: `pending_handoffs` が本番で保存されないバグの調査・修正
+  > 2026-04-21 解決: 原因は (1) pop の無条件削除 (仮説 b) + (2) `set_pending_handoff` の upsert で `created_at` が更新されず TTL が早期に切れる問題 の 2 つ
+  > 対応: pop を peek + delete に 2 フェーズ化 + upsert payload に `created_at=now()` を明示追加
+  > 本格対応案 (後日、race condition が再度問題化したら): /callback 即時 ACK + push_message 非同期化 + event_id による冪等性担保
 - [ ] Vercel トライアル期限 (2026-05-04 頃) 前に Hobby プラン (無料) へダウングレードするか有料継続するか判断
 - [ ] Phase 7 の `reservations` テーブル / 予約フローの実装 (スコープが固まったら)
 
@@ -88,17 +87,14 @@
 - [x] `pending_handoffs` テーブルを作成
 - [x] `app.py` で 2 段階承認フローを実装
 - [x] `ADMIN_LINE_TARGET_ID` を `.env` に設定 (2026-04-20 取得: <管理者の LINE user_id>)
-- [~] エンドツーエンド検証 (4 ケース中 3 ケース成立、シナリオ 3 は Phase 7.6 バグ待ち)
+- [x] エンドツーエンド検証 (4 ケース全成立)
   > 2026-04-20 実施 (ローカル cloudflared 環境):
   > - [x] 1: FAQ にない質問 → `スタッフにお繋ぎしましょうか？` が返る
   > - [x] 2: 「はい」送信 → 管理者 LINE に `🔔 スタッフ対応依頼` 通知が届く
   >
   > 2026-04-21 実施 (本番 Vercel 環境, gemini-2.5-flash-lite):
   > - [x] 4: FAQ ヒット質問「レンタル料金は？」→ HANDOFF_PHRASE なし、FAQ 回答、通知なし、pending_handoffs 行なし
-  > - [~] 3: FAQ ミス質問「猫を連れて行ってもいいですか？」→ 1通目に HANDOFF_PHRASE 含む返信は成立、ただし **`pending_handoffs` に行が保存されない** ため Step 2「いいえ」の検証不可
-  >   - Vercel Logs に `pending_handoff set for` も `pending_handoff保存失敗` も出ていない
-  >   - 500 Exception が多発 (LINE Webhook リトライ起因の reply_token 再利用エラー)
-  >   - 詳細は Phase 7.6 で追う
+  > - [x] 3: FAQ ミス質問「猫を連れて行ってもいいですか？」→ HANDOFF_PHRASE 含む返信 + `pending_handoffs` 行保存 → 「いいえ」で固定文言「承知しました。ほかにご質問があればどうぞ。」と行削除、「はい」で 🔔 管理者通知と行削除を本番で確認 (Phase 7.6 の小修正後に成立)
 
 ## Phase 8: Vercel デプロイ
 
@@ -143,3 +139,4 @@
   - 背景: `created_at` カラムの `DEFAULT now()` は INSERT 時のみ発火し、UPDATE (upsert の UPDATE パス) では更新されないため、同一 user_id で 2 回目以降の質問でも初回の `created_at` が残り、TTL(10 分) が誤って早期に切れる
   - 症状: 21:37 の「いいえ」送信で peek が `expired` 判定 → 行削除 + None 返却 → Gemini 経路にフォールスルー → 固定文言ではなく Gemini 生成文が返る
   - 修正: `datetime.now(timezone.utc).isoformat()` を upsert に同梱し、質問のたびに TTL をリセット
+- Phase 7.5 E2E シナリオ 3 を本番で再検証 → 「いいえ」で固定文言 + 行削除、「はい」で 🔔 通知 + 行削除、ともに成立 → Phase 7.5 / Phase 7.6 をクローズ
