@@ -70,15 +70,16 @@ def handle_message(event):
     user_id = getattr(event.source, "user_id", None)
     logger.info(f"受信: {user_text} source={event.source}")
 
-    pending = pop_pending_handoff(user_id) if user_id else None
-    if pending:
-        if _is_affirmative(user_text):
-            notify_staff(pending["original_question"], pending["bot_reply"])
-            _reply(event, "スタッフに連絡しました。しばらくお待ちください。")
-            return
-        if _is_negative(user_text):
-            _reply(event, "承知しました。ほかにご質問があればどうぞ。")
-            return
+    if user_id and (_is_affirmative(user_text) or _is_negative(user_text)):
+        pending = pop_pending_handoff(user_id)
+        if pending:
+            if _is_affirmative(user_text):
+                notify_staff(pending["original_question"], pending["bot_reply"])
+                _reply(event, "スタッフに連絡しました。しばらくお待ちください。")
+                return
+            if _is_negative(user_text):
+                _reply(event, "承知しました。ほかにご質問があればどうぞ。")
+                return
 
     try:
         reply_text = get_gemini_response(user_text)
@@ -86,14 +87,14 @@ def handle_message(event):
         logger.error(f"Gemini APIエラー: {e}")
         reply_text = "申し訳ありません、現在応答できません。しばらくお待ちください。"
 
-    _reply(event, reply_text)
-
     if HANDOFF_PHRASE in reply_text and user_id:
         try:
             set_pending_handoff(user_id, user_text, reply_text)
             logger.info(f"pending_handoff set for {user_id}")
         except Exception as e:
             logger.error(f"pending_handoff保存失敗: {e}")
+
+    _reply(event, reply_text)
 
 
 if __name__ == "__main__":
