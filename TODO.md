@@ -1,151 +1,137 @@
 # おかスノ LINE Bot 開発ロードマップ
 
 > 最終目標: Git/GitHub でバージョン管理し、Supabase に FAQ・予約データを保存、Vercel で 24/7 本番稼働する LINE Bot
+> **2026-04-20 本番稼働開始** — Vercel サーバーレス + Supabase + Gemini で LINE Webhook が 24/7 応答中
+
+## 現在のステータス
+
+- 本番 URL: https://okasuno-line-bot.vercel.app
+- LINE Webhook: Vercel に切替済 (cloudflared 停止済)
+- Gemini モデル: `gemini-2.5-flash-lite` (有料・前払い残高)
+- 稼働中の構成: Vercel (api/index.py) → Flask app → Gemini 2.5 Flash-Lite / Supabase
+
+## 翌日以降に必要なタスク
+
+- [ ] Phase 7.6: `pending_handoffs` が本番で保存されないバグの調査・修正
+  > 2026-04-21 の E2E 検証で判明: Vercel Serverless + LINE Webhook リトライ環境下で、`set_pending_handoff` への到達前に lambda が kill されている可能性が高い
+  > 仮説: (a) LINE 切断による Vercel request cancellation で lambda 終了 / (b) 先着 lambda の set 直後に後続 lambda の pop による無条件削除
+  > 小修正案 (本日着手予定): app.py で set_pending_handoff を _reply の前に移動 + pop_pending_handoff を AFFIRMATIVE/NEGATIVE 合致時のみ delete に条件化
+  > 本格対応案 (後日): /callback 即時 ACK + push_message 非同期化 + event_id による冪等性担保
+- [ ] Vercel トライアル期限 (2026-05-04 頃) 前に Hobby プラン (無料) へダウングレードするか有料継続するか判断
+- [ ] Phase 7 の `reservations` テーブル / 予約フローの実装 (スコープが固まったら)
+
+---
 
 ## Phase 1: 環境構築と設定ファイルの準備
 
 - [x] Python仮想環境を作成し、有効化する
-  > ゴール: `python --version` で Python 3.9+ が表示される
 - [x] 必要なライブラリをインストールする（flask, line-bot-sdk, anthropic, python-dotenv）
-  > ゴール: `pip install -r requirements.txt` がエラーなく完了する
 - [x] `requirements.txt` を作成する
-  > ゴール: ファイルに4つのライブラリとバージョンが記載されている
-- [x] `.env` ファイルを作成し、APIキーを設定する（LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, GEMINI_API_KEY）
-  > ゴール: `.env` に3つのキーが設定され、`config.py` から読み込める
+- [x] `.env` ファイルを作成し、APIキーを設定する
 - [x] `config.py` で環境変数を読み込む処理を書く
-  > ゴール: `python -c "from config import LINE_CHANNEL_SECRET; print('OK')"` がエラーなく実行できる
 - [x] `.gitignore` を作成し、`.env` や `__pycache__/` を除外する
-  > ゴール: `git status` で `.env` が追跡対象に表示されない
 
 ## Phase 2: サーバー基盤の作成
 
 - [x] Flaskアプリを作成し、`/callback` エンドポイントを実装する
-  > ゴール: `python app.py` でサーバーが起動し、ログに「サーバー起動」と表示される
-- [x] `/health` エンドポイントを追加する（動作確認用）
-  > ゴール: ブラウザで `http://localhost:5000/health` にアクセスし `{"status": "ok"}` が返る
-- [x] cloudflared (Cloudflare Tunnel) をインストールし、ローカルサーバーを外部公開する
-  > ゴール: `cloudflared tunnel --url http://localhost:5000` で発行されたURLにブラウザからアクセスでき、`/health` が応答する
+- [x] `/health` エンドポイントを追加する
+- [x] cloudflared でローカルサーバーを外部公開する (開発時のみ使用、Phase 8 で役目終了)
 - [x] LINE Developers ConsoleでWebhook URLを設定する
-  > ゴール: ConsoleのWebhook設定に `https://xxxx.trycloudflare.com/callback` を入力し、「検証」ボタンで成功する
 - [x] Webhook署名検証の動作を確認する
-  > ゴール: LINE ConsoleからのWebhook検証で200が返り、不正なリクエストには400が返る
 
 ## Phase 3: オウム返しBotの実装
 
-- [x] `handle_message` をオウム返しに変更して動作確認する（Claude連携を一時的に外す）
-  > ゴール: LINEで「こんにちは」と送ると「こんにちは」とそのまま返ってくる
-- [x] LINEアプリからメッセージを送り、端末〜サーバー〜LINE間の通信が正常に動くことを確認する
-  > ゴール: 送信→受信→返信の一連のフローがエラーなく動作し、サーバーのログにメッセージ内容が記録される
+- [x] `handle_message` をオウム返しで実装して疎通確認
+- [x] LINE ↔ サーバー ↔ LINE の通信フローをログで確認
 
 ## Phase 4: Gemini API連携
 
-- [x] `gemini_client.py` を作成し、Gemini APIにメッセージを送って返答を受け取る関数を実装する
-  > ゴール: `python -c "from gemini_client import get_gemini_response; print(get_gemini_response('こんにちは'))"` でAIの返答が表示される
-- [x] `config.py` にシステムプロンプト（おかスノのサポート用）を定義する
-  > ゴール: `SYSTEM_PROMPT` にショップの役割・対応範囲が記述されている
-- [x] `handle_message` でオウム返しをGemini連携に切り替える
-  > ゴール: LINEで質問を送ると、おかスノのサポートBotとしてAIが返答する
-- [x] LINEから実際に複数パターンのメッセージを送り、期待通りの返答が返ることを確認する
-  > ゴール: 「レンタル料金は？」「予約したい」「営業時間は？」等を送り、それぞれ適切な返答が返る
+- [x] `gemini_client.py` を作成し、Gemini API で返答を取得
+- [x] `config.py` にシステムプロンプト (おかスノサポート用) を定義
+- [x] `handle_message` を Gemini 連携に切替
+- [x] 複数パターンで動作確認
 
 ## Phase 5: Git / GitHub 導入
 
-- [x] `git init` でローカルリポジトリを初期化する
-  > ゴール: `git status` でワーキングツリーが表示される
-- [x] `.gitignore` が `venv/`・`.env`・`__pycache__/` を除外しているか確認・追記する
-  > ゴール: `git status` に `.env` と `venv/` が表示されない
-- [x] 初回コミット（Phase 1〜4 の成果を一括コミット）を行う
-  > ゴール: `git log` に初回コミットが記録される
-- [x] GitHub で Private リポジトリを作成する（例: `okasuno-line-bot`）
-  > ゴール: GitHub Web 上で空のリポジトリが存在する
-- [x] リモート登録と初回 push（`git remote add origin ...` → `git push -u origin main`）を行う
-  > ゴール: GitHub Web 上に全ファイル（`.env` 以外）が表示される
-- [x] `README.md` を作成する（Bot の概要・セットアップ手順・環境変数一覧）
-  > ゴール: リポジトリトップで概要が読める
+- [x] `git init` で初期化
+- [x] `.gitignore` で venv/.env/__pycache__ を除外
+- [x] 初回コミット
+- [x] GitHub Private リポジトリ `okasuno-line-bot` を作成
+- [x] remote 登録 + 初回 push
+- [x] README.md を作成
 
 ## Phase 6: エラーハンドリングとコードの整理
 
-- [x] Gemini APIのエラー（接続エラー、レート制限、その他例外）にフォールバックメッセージを返す処理を追加する
-  > ゴール: APIエラー時にユーザーへ「しばらくお待ちください」等のメッセージが返り、サーバーがクラッシュしない
-- [x] `app.py` にロギング（`logging`モジュール）を導入する
-  > ゴール: メッセージの受信・返信・エラーがタイムスタンプ付きでコンソールに出力される
-- [x] Webhook署名検証失敗時のログとエラーレスポンスを確認する
-  > ゴール: 不正リクエスト受信時に警告ログが出力され、400が返ることをテストで確認する
-- [ ] コード全体を見直し、不要なコメント・未使用importがないことを確認する
-  > ゴール: 各ファイルが整理され、`python app.py` で警告なく起動する
+- [x] Gemini API エラー時のフォールバックメッセージを実装 (`app.py` の try/except)
+- [x] `logging` モジュールでログ出力
+- [x] Webhook 署名検証失敗時のログ・400 レスポンス確認
+- [ ] コード全体を見直し、不要なコメント・未使用 import を確認
+  > Phase 8 完了後、落ち着いたタイミングで実施
 
 ## Phase 7: Supabase 連携（FAQ・商品マスタ＋予約データ）
 
-> 2026-04-20 方針決定: 店舗情報 (料金・営業時間など) は Supabase `faqs` に保存。デプロイ後は Supabase ダッシュボードから編集すれば再デプロイ不要で即反映される運用にする。
-
-- [x] Supabase プロジェクトを作成し、URL と anon key を控える
-  > ゴール: Supabase ダッシュボードでプロジェクトが開ける
-- [x] `supabase` Python クライアントを `requirements.txt` に追加する
-  > ゴール: `pip install -r requirements.txt` で `supabase-py` が入る
-- [x] `.env` に `SUPABASE_URL` / `SUPABASE_KEY` を追加し、`config.py` で読み込む
-  > ゴール: `python -c "from config import SUPABASE_URL; print('OK')"` がエラーなく動く
-- [x] Supabase SQL Editor で `faqs` テーブルを作成する（`id`, `question`, `answer`, `category`, `updated_at`）
-  > ゴール: Table Editor に `faqs` が存在し、サンプルFAQを挿入できる
-  > スキーマ: `id bigint generated always as identity pk, question text not null, answer text not null, category text not null, updated_at timestamptz default now()`
-  > RLS: anon に SELECT のみ許可（書き込みは拒否）
-  > シード category 案: 料金 / 営業時間 / 予約方法 / キャンセルポリシー / アクセス / 持ち物 / サイズ展開 / 支払い / その他
-- [ ] Supabase SQL Editor で `reservations` テーブルを作成する（`id`, `line_user_id`, `plan`, `reserved_at`, `party_size`, `status`, `created_at`）
-  > ゴール: Table Editor に `reservations` が存在する
-- [x] `supabase_client.py` を作成し、FAQ 取得関数を実装する
-  > ゴール: `python -c "from supabase_client import get_all_faqs; print(get_all_faqs())"` でサンプルFAQが返る
-  > 実装済: `get_all_faqs()` / `format_faqs_for_prompt()` / `set_pending_handoff()` / `pop_pending_handoff()`
-- [x] `gemini_client.py` を改修し、回答前に FAQ を取得して Gemini のプロンプトに組み込む
-  > ゴール: 「レンタル料金は？」と送ると Supabase 上の FAQ に基づいた回答が返る
-  > 毎リクエストで FAQ を取得 → `## 店舗情報(最新)` として system_instruction に注入
-- [ ] 予約キーワード検知時、対話フローで日時・プラン・人数を聞き取り `reservations` に INSERT する
-  > ゴール: LINE から予約を実行すると Supabase にレコードが追加され、確認メッセージが返る
+- [x] Supabase プロジェクトを作成
+- [x] `supabase` Python クライアントを requirements.txt に追加
+- [x] `.env` / `config.py` に SUPABASE_URL / SUPABASE_KEY を追加
+- [x] `faqs` テーブルを作成し、サンプル投入
+- [ ] `reservations` テーブルを作成
+  > 予約フローの要件が固まってから着手 (現時点では FAQ 対応のみで運用開始)
+- [x] `supabase_client.py` で FAQ 取得 + pending_handoff 操作を実装
+- [x] `gemini_client.py` で FAQ を system_instruction に注入
+- [ ] 予約キーワード検知時の対話フロー (日時・プラン・人数) で `reservations` に INSERT
+  > reservations テーブル作成後
 
 ## Phase 7.5: スタッフエスカレーション通知（2 段階承認）
 
-> FAQ に無い質問が来たとき、Bot が「スタッフにお繋ぎしましょうか？」と尋ね、ユーザーが肯定したら管理者 LINE に通知する 2 段階フロー。状態は Supabase に保持し、Vercel サーバーレスでも成立するようにする。
-
-- [x] `config.py` で `HANDOFF_PHRASE = "スタッフにお繋ぎしましょうか？"` を定数化し、SYSTEM_PROMPT をペルソナ + 注入ルール + 定型質問文に再構成
-  > ゴール: FAQ に無い内容への回答末尾に必ず HANDOFF_PHRASE が付く
-- [x] `notifier.py` を作成し `notify_staff(user_text, bot_text)` で LINE `push_message` を送るラッパを実装
-  > ゴール: ADMIN_LINE_TARGET_ID 未設定時は警告ログで no-op、送信失敗も握り潰してログのみ
-- [x] Supabase SQL Editor で `pending_handoffs` テーブルを作成する
-  > ```sql
-  > create table pending_handoffs (
-  >   user_id text primary key,
-  >   original_question text not null,
-  >   bot_reply text not null,
-  >   created_at timestamptz default now()
-  > );
-  > alter table pending_handoffs enable row level security;
-  > ```
-  > RLS: SUPABASE_KEY に service_role を使うか、このテーブルは anon に INSERT/SELECT/DELETE を許可する専用ポリシーを設定
+- [x] `config.py` で HANDOFF_PHRASE を定数化し SYSTEM_PROMPT を再構成
+- [x] `notifier.py` で `notify_staff` を実装
+- [x] `pending_handoffs` テーブルを作成
 - [x] `app.py` で 2 段階承認フローを実装
-  > ゴール:
-  > 1. 毎受信で `pop_pending_handoff(user_id)` を実行
-  > 2. 保留中 + 肯定語 (yes/はい/お願い/ok/了解 等) → `notify_staff` + 「スタッフに連絡しました」
-  > 3. 保留中 + 否定語 (no/いいえ/結構/大丈夫 等) → 「承知しました」で終了
-  > 4. 保留なし → Gemini 応答 → 返答に HANDOFF_PHRASE が含まれれば `set_pending_handoff` で保留登録
-  > 5. 保留は 10 分で失効
-- [ ] `ADMIN_LINE_TARGET_ID` を `.env` に設定する
-  > 取得手順: 管理者 LINE で Bot に一度メッセージ送信 → `app.py` のログ `source=...` から `user_id` をコピー → `.env` に貼り付け → 再起動
-  > グループ通知にしたい場合は Bot をグループに招待 → グループで発言 → `group_id` を取得して貼り付け
-- [ ] エンドツーエンド検証
-  > 1. FAQ に無い質問を送る → Bot が `スタッフにお繋ぎしましょうか？` と返す
-  > 2. 続けて「はい」と送る → 管理者 LINE に「🔔 スタッフ対応依頼」通知が届く
-  > 3. 再度 FAQ に無い質問 → 「いいえ」で返す → 通知が飛ばないこと
-  > 4. FAQ にヒットする質問 (例: 営業時間) では通知が発生しないこと
+- [x] `ADMIN_LINE_TARGET_ID` を `.env` に設定 (2026-04-20 取得: <管理者の LINE user_id>)
+- [~] エンドツーエンド検証 (4 ケース中 3 ケース成立、シナリオ 3 は Phase 7.6 バグ待ち)
+  > 2026-04-20 実施 (ローカル cloudflared 環境):
+  > - [x] 1: FAQ にない質問 → `スタッフにお繋ぎしましょうか？` が返る
+  > - [x] 2: 「はい」送信 → 管理者 LINE に `🔔 スタッフ対応依頼` 通知が届く
+  >
+  > 2026-04-21 実施 (本番 Vercel 環境, gemini-2.5-flash-lite):
+  > - [x] 4: FAQ ヒット質問「レンタル料金は？」→ HANDOFF_PHRASE なし、FAQ 回答、通知なし、pending_handoffs 行なし
+  > - [~] 3: FAQ ミス質問「猫を連れて行ってもいいですか？」→ 1通目に HANDOFF_PHRASE 含む返信は成立、ただし **`pending_handoffs` に行が保存されない** ため Step 2「いいえ」の検証不可
+  >   - Vercel Logs に `pending_handoff set for` も `pending_handoff保存失敗` も出ていない
+  >   - 500 Exception が多発 (LINE Webhook リトライ起因の reply_token 再利用エラー)
+  >   - 詳細は Phase 7.6 で追う
 
 ## Phase 8: Vercel デプロイ
 
-- [ ] `vercel.json` を作成し、Flask アプリを serverless function として配置する（`api/index.py` 等）
-  > ゴール: `vercel dev` でローカル起動し、`/health` が応答する
-- [ ] Vercel アカウントを作成し、Phase 5 で作成した GitHub Private リポを import する
-  > ゴール: Vercel ダッシュボードにプロジェクトが表示される
-- [ ] Vercel 環境変数に `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` / `GEMINI_API_KEY` / `SUPABASE_URL` / `SUPABASE_KEY` を設定する
-  > ゴール: Vercel Project Settings → Environment Variables に5件登録済み
-- [ ] GitHub へ push し、Vercel の自動デプロイが成功することを確認する
-  > ゴール: `https://xxx.vercel.app/health` がブラウザで `{"status": "ok"}` を返す
-- [ ] LINE Developers Console の Webhook URL を `https://xxx.vercel.app/callback` に変更する
-  > ゴール: LINE からメッセージを送ると Vercel 経由で応答が返る（PC を落としても稼働）
-- [ ] cloudflared を停止し、Vercel 本番運用に切り替える
-  > ゴール: `cloudflared` プロセスを起動せずに Bot が動作し続ける
+- [x] `api/index.py` + `vercel.json` を作成 (Flask app を serverless 化)
+- [x] Vercel アカウント作成 (dodorian-kg / Pro Trial, 2026-05-04 頃まで)
+- [x] GitHub リポジトリ `okasuno-line-bot` を Vercel に import
+- [x] 環境変数 6 件を登録 (LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN / GEMINI_API_KEY / SUPABASE_URL / SUPABASE_KEY / ADMIN_LINE_TARGET_ID)
+- [x] Deploy 成功 (https://okasuno-line-bot.vercel.app/health が 200 OK)
+- [x] LINE Webhook URL を `https://okasuno-line-bot.vercel.app/callback` に切替 (検証成功)
+- [x] cloudflared プロセスを停止
+
+---
+
+## 本日 (2026-04-20) の出来事メモ
+
+- Phase 7.5 E2E をローカル (cloudflared) で着手したが、Gemini 無料枠 20 RPD を連続でヒット
+- モデル切替を 4 パターン試行: `gemini-2.5-flash-lite` → `gemini-2.0-flash` (limit:0) → `gemini-2.5-flash` → `gemini-1.5-flash` (404) → `gemini-2.0-flash-lite` (limit:0)
+- 新プロジェクトで Gemini API キーを再発行しても枠がリセットされなかった (Google アカウント横断で制限される模様)
+- シナリオ 3/4 は翌日持ち越しとし、Phase 8 (Vercel デプロイ) を先行実施
+- Vercel トライアル登録 → GitHub import → 環境変数設定 → デプロイ → LINE Webhook 切替までを完了し、本番稼働開始
+
+## 2026-04-21 の出来事メモ
+
+- Google Cloud の Gemini API に前払いで 2000 円チャージ (従量課金の buffer)
+- 当初予定した `gemini-1.5-flash-8b` は 2026 時点で deprecation 済み (ListModels に含まれず 404) のため `gemini-2.5-flash-lite` を採用
+  > 安定版 GA は 2026-02-19、$0.10/1M input・$0.40/1M output で 2.5 系最安
+- `gemini_client.py` のモデルを `gemini-2.5-flash` → `gemini-2.5-flash-lite` へ変更
+- API キーは同一プロジェクトのため `.env` / Vercel 環境変数の変更は不要
+- ローカルで `get_gemini_response("営業時間は何時から？")` を実行 → FAQ ベースの正しい応答を確認
+- 本番 Vercel で Phase 7.5 E2E 残り 2 ケースを検証
+  - シナリオ 4「レンタル料金は？」: 成立 (FAQ 回答、HANDOFF_PHRASE なし、通知なし、pending_handoffs 行なし)
+  - シナリオ 3「猫を連れて行ってもいいですか？」: Step 1 の HANDOFF_PHRASE 含む返信は成立。ただし Supabase `pending_handoffs` に行が保存されず Step 2「いいえ」の検証に進めず
+    - 併発していた事象: Vercel ログに `POST 500 Exception on /callback` が 10 数件、合間に `POST 200` 数件
+    - `pending_handoff set for` / `pending_handoff保存失敗` のログが**一切出ていない**点から、`set_pending_handoff` 呼び出しに到達する前に lambda が終了している疑い
+    - 仮説: Gemini の応答遅延 → LINE Webhook 1 秒タイムアウト → 同一イベント再送 → Vercel で複数 lambda 並行 → 先着 lambda が reply 後 `set_pending_handoff` 到達前に request cancellation で kill / 後続 lambda は reply_token 再利用で 500
+    - 対応: Phase 7.6 として新設し、まず小修正 (set_pending_handoff を _reply 前へ、pop_pending_handoff を yes/no 合致時のみ) を試行する方針
